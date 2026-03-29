@@ -4,10 +4,10 @@ import io
 from cashflow_direct import load_trial_balance, create_direct_cf_statement  # type: ignore
 from financial_metrics import compute_financial_metrics
 
-st.set_page_config(page_title="Matrix CF Generator", layout="centered")
+st.set_page_config(page_title="財務分析アプリ", layout="centered")
 
-st.title("📊 マトリックス法 キャッシュフロージェネレーター")
-st.markdown("お手元の **残高試算表 (ExcelまたはCSV)** をアップロードするだけで、直接法キャッシュフロー計算書を自動生成します。")
+st.title("📊 財務分析アプリ")
+st.markdown("お手元の **残高試算表 (ExcelまたはCSV)** をアップロードするだけで、簡易な直接法のキャッシュフロー計算書の作成と財務指標の分析を自動で行います。")
 
 uploaded_file = st.file_uploader("残高試算表のファイル（Excel/CSV）をドラッグ＆ドロップ（または選択）", type=["xlsx", "xls", "csv"])
 
@@ -34,13 +34,11 @@ if uploaded_file is not None:
                 uploaded_file.seek(0)
             df_monthly, df_quarterly = compute_financial_metrics(uploaded_file)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("##### 🔍 月次指標 (異常検知用)")
-                st.dataframe(df_monthly, use_container_width=True, hide_index=True)
-            with col2:
-                st.markdown("##### 📊 四半期指標 (体質分析用)")
-                st.dataframe(df_quarterly, use_container_width=True, hide_index=True)
+            st.markdown("##### 🔍 月次指標 (異常検知用)")
+            st.dataframe(df_monthly, use_container_width=True, hide_index=True)
+            
+            st.markdown("##### 📊 四半期指標 (体質分析用)")
+            st.dataframe(df_quarterly, use_container_width=True, hide_index=True)
         
         # ダウンロード用のExcel生成
         buffer = io.BytesIO()
