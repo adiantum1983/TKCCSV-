@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.env
+.venv
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Financial Files (Do not upload sensitive data to public repos)
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.txt
+!requirements.txt
+!README.md
+!cashflow_direct.py
+!app.py
+!financial_metrics.py
