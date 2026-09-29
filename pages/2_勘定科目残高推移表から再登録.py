@@ -9,7 +9,7 @@ import streamlit as st
 
 
 API_BASE = "http://127.0.0.1:8530"
-MONTH_RE = re.compile(r"^(20\\d{2})/(0?[1-9]|1[0-2])$")
+MONTH_RE = re.compile(r"^(20\d{2})/(0?[1-9]|1[0-2])$")
 RAW_COLUMNS = [
     "previous_month",
     "debit",
