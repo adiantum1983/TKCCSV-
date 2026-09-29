@@ -98,7 +98,6 @@ def build_period_values(
     """Convert P&L month movements into fiscal YTD values for the database."""
     fiscal_start = closing_month % 12 + 1
     period_values: dict[int, dict[str, float]] = {}
-    source_keys = set(month_columns)
     for key in sorted(month_columns):
         previous = previous_key(key)
         if key % 100 == fiscal_start:
