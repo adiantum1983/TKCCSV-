@@ -67,6 +67,11 @@ def read_trend_csv(content: bytes) -> tuple[pd.DataFrame, dict[int, str]]:
     if len(duplicates):
         raise ValueError("勘定科目コードが重複しています: " + ", ".join(duplicates[:10]))
 
+    ordered_keys = sorted(month_columns)
+    for earlier, later in zip(ordered_keys, ordered_keys[1:]):
+        if later != (earlier + 1 if earlier % 100 < 12 else (earlier // 100 + 1) * 100 + 1):
+            raise ValueError("CSVの対象月が連続していません。")
+
     for column in month_columns.values():
         values = frame[column].astype(str).str.replace(",", "", regex=False).str.strip()
         frame[column] = pd.to_numeric(values, errors="coerce")
@@ -93,29 +98,22 @@ def build_period_values(
     source: pd.DataFrame,
     month_columns: dict[int, str],
     closing_month: int,
-    prior_periods: dict[int, dict[str, dict]],
 ) -> dict[int, dict[str, float]]:
-    """Convert monthly P&L movements into fiscal YTD values using the DB closing month."""
+    """Convert contiguous monthly P&L movements into fiscal YTD values."""
+    ordered_keys = sorted(month_columns)
     fiscal_start = closing_month % 12 + 1
-    period_values: dict[int, dict[str, float]] = {}
-    for key in sorted(month_columns):
-        previous = previous_key(key)
-        if key % 100 == fiscal_start:
-            # The month after the registered closing month starts a new fiscal year.
-            base: dict[str, float] = {}
-        elif previous in period_values:
-            base = period_values[previous]
-        else:
-            # If the CSV begins mid-year, continue the cumulative total from the DB
-            # for the preceding month. The CSV is expected to contain contiguous months
-            # from the fiscal-year start for a complete in-period recalculation.
-            base = {
-                code: float(row.get("current_month") or 0)
-                for code, row in prior_periods.get(previous, {}).items()
-            }
+    first_month = ordered_keys[0] % 100
+    if first_month != fiscal_start:
+        raise ValueError(
+            f"CSVは期首月（決算月の翌月）の{fiscal_start}月から始まる必要があります。"
+            f"先頭月は{first_month}月です。"
+        )
 
-        values: dict[str, float] = {}
+    period_values: dict[int, dict[str, float]] = {}
+    base: dict[str, float] = {}
+    for key in ordered_keys:
         month_column = month_columns[key]
+        values: dict[str, float] = {}
         for _, account in source.iterrows():
             code = str(account["account_code"])
             amount = account[month_column]
@@ -126,6 +124,7 @@ def build_period_values(
                 else amount
             )
         period_values[key] = values
+        base = values
     return period_values
 
 
@@ -235,16 +234,14 @@ if not selected_keys:
     st.stop()
 
 try:
-    prior_keys = {previous_key(key) for key in keys if previous_key(key) not in month_columns}
-    prior_periods = {key: fetch_balances(client_name, key) for key in prior_keys}
-    period_values = build_period_values(source, month_columns, closing_month, prior_periods)
+    period_values = build_period_values(source, month_columns, closing_month)
     snapshots: dict[int, tuple[dict[str, dict], pd.DataFrame]] = {}
     preview = []
 
     for key in selected_keys:
         existing = fetch_balances(client_name, key)
         month_frame = build_month_frame(
-            source, key, month_columns, period_values, existing, prior_periods
+            source, key, month_columns, period_values, existing, {}
         )
         snapshots[key] = (existing, month_frame)
         sales = month_frame.loc[month_frame["account_code"] == "4000", "current_month"]
