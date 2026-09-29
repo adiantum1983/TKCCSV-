@@ -31,6 +31,11 @@ def previous_key(key: int) -> int:
     return (year - 1) * 100 + 12 if month == 1 else year * 100 + month - 1
 
 
+def is_profit_and_loss_account(account_code: str) -> bool:
+    # Codes 4-8 are P&L; code 9 contains balance-sheet totals and equity accounts.
+    return account_code[:1] in "45678"
+
+
 def read_trend_csv(content: bytes) -> tuple[pd.DataFrame, dict[int, str]]:
     last_error: Exception | None = None
     for encoding in ("utf-8-sig", "cp932", "utf-8"):
@@ -120,7 +125,7 @@ def build_period_values(
             amount = float(amount) if pd.notna(amount) else 0.0
             values[code] = (
                 base.get(code, 0.0) + amount
-                if code[:1] in "456789"
+                if is_profit_and_loss_account(code)
                 else amount
             )
         period_values[key] = values
@@ -153,7 +158,7 @@ def build_month_frame(
             float(previous_rows.get(code, {}).get("current_month") or 0),
         )
 
-        if code[:1] in "456789":
+        if is_profit_and_loss_account(code):
             if code.startswith("4"):
                 debit, credit = max(-monthly_amount, 0.0), max(monthly_amount, 0.0)
             else:
@@ -235,13 +240,15 @@ if not selected_keys:
 
 try:
     period_values = build_period_values(source, month_columns, closing_month)
+    first_previous_key = previous_key(min(keys))
+    prior_periods = {first_previous_key: fetch_balances(client_name, first_previous_key)}
     snapshots: dict[int, tuple[dict[str, dict], pd.DataFrame]] = {}
     preview = []
 
     for key in selected_keys:
         existing = fetch_balances(client_name, key)
         month_frame = build_month_frame(
-            source, key, month_columns, period_values, existing, {}
+            source, key, month_columns, period_values, existing, prior_periods
         )
         snapshots[key] = (existing, month_frame)
         sales = month_frame.loc[month_frame["account_code"] == "4000", "current_month"]
@@ -268,7 +275,7 @@ if new_periods:
     st.warning("DBに該当月がないため新規登録になります: " + ", ".join(new_periods))
 
 st.markdown(
-    f"DBの決算月は{closing_month}月で、翌月（{closing_month % 12 + 1}月）を期首として損益科目（コード4〜9）を月別発生額から累積します。"
+    f"DBの決算月は{closing_month}月で、翌月（{closing_month % 12 + 1}月）を期首として損益科目（コード4〜8）を月別発生額から累積します。"
     "貸借科目（コード1〜3）は各月の残高として登録します。借方・貸方は損益科目の"
     "当月発生額から作成します。前年同月値は既存DB行から引き継ぎ、新規科目は0です。"
 )
