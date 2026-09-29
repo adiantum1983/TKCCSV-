@@ -95,16 +95,20 @@ def build_period_values(
     closing_month: int,
     prior_periods: dict[int, dict[str, dict]],
 ) -> dict[int, dict[str, float]]:
-    """Convert P&L month movements into fiscal YTD values for the database."""
+    """Convert monthly P&L movements into fiscal YTD values using the DB closing month."""
     fiscal_start = closing_month % 12 + 1
     period_values: dict[int, dict[str, float]] = {}
     for key in sorted(month_columns):
         previous = previous_key(key)
         if key % 100 == fiscal_start:
+            # The month after the registered closing month starts a new fiscal year.
             base: dict[str, float] = {}
         elif previous in period_values:
             base = period_values[previous]
         else:
+            # If the CSV begins mid-year, continue the cumulative total from the DB
+            # for the preceding month. The CSV is expected to contain contiguous months
+            # from the fiscal-year start for a complete in-period recalculation.
             base = {
                 code: float(row.get("current_month") or 0)
                 for code, row in prior_periods.get(previous, {}).items()
@@ -267,7 +271,7 @@ if new_periods:
     st.warning("DBに該当月がないため新規登録になります: " + ", ".join(new_periods))
 
 st.markdown(
-    f"損益科目（コード4〜9）は月別発生額を決算月（{closing_month}月）から累積し、"
+    f"DBの決算月は{closing_month}月で、翌月（{closing_month % 12 + 1}月）を期首として損益科目（コード4〜9）を月別発生額から累積します。"
     "貸借科目（コード1〜3）は各月の残高として登録します。借方・貸方は損益科目の"
     "当月発生額から作成します。前年同月値は既存DB行から引き継ぎ、新規科目は0です。"
 )
