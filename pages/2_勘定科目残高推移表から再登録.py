@@ -244,6 +244,8 @@ try:
     prior_periods = {first_previous_key: fetch_balances(client_name, first_previous_key)}
     snapshots: dict[int, tuple[dict[str, dict], pd.DataFrame]] = {}
     preview = []
+    account_differences = []
+    removed_accounts = []
 
     for key in selected_keys:
         existing = fetch_balances(client_name, key)
@@ -251,17 +253,52 @@ try:
             source, key, month_columns, period_values, existing, prior_periods
         )
         snapshots[key] = (existing, month_frame)
+        period_label = month_label(key)
+        csv_codes = set(month_frame["account_code"].astype(str))
+        period_differences = 0
+
+        for _, account in month_frame.iterrows():
+            code = str(account["account_code"])
+            db_row = existing.get(code)
+            db_value = db_row.get("current_month") if db_row else None
+            csv_value = float(account["current_month"])
+            if db_value is None or abs(csv_value - float(db_value or 0)) > 0.01:
+                period_differences += 1
+                account_differences.append(
+                    {
+                        "年月": period_label,
+                        "科目コード": code,
+                        "科目名": account["account_name"],
+                        "CSV再構成値": csv_value,
+                        "現在のDB値": float(db_value) if db_value is not None else None,
+                        "差額": csv_value - float(db_value) if db_value is not None else None,
+                    }
+                )
+
+        for code, db_row in existing.items():
+            if code not in csv_codes:
+                removed_accounts.append(
+                    {
+                        "年月": period_label,
+                        "科目コード": code,
+                        "科目名": db_row.get("account_name", ""),
+                        "現在のDB値": float(db_row.get("current_month") or 0),
+                    }
+                )
+
         sales = month_frame.loc[month_frame["account_code"] == "4000", "current_month"]
         old_sales = existing.get("4000", {}).get("current_month")
         new_sales = float(sales.iloc[0]) if not sales.empty else 0.0
         preview.append(
             {
-                "年月": month_label(key),
+                "年月": period_label,
                 "CSV科目数": len(month_frame),
                 "DB登録科目数": len(existing),
+                "差異科目数": period_differences,
+                "削除対象科目数": len(existing) - len(csv_codes.intersection(existing)),
                 "売上高累計（CSV計算）": new_sales,
                 "売上高累計（DB）": float(old_sales) if old_sales is not None else None,
-                "差額": new_sales - float(old_sales) if old_sales is not None else None,
+                "売上高差額": new_sales - float(old_sales) if old_sales is not None else None,
             }
         )
 except Exception as exc:
@@ -270,6 +307,21 @@ except Exception as exc:
 
 st.subheader("置換内容の確認")
 st.dataframe(pd.DataFrame(preview), hide_index=True, use_container_width=True)
+if account_differences:
+    st.subheader("科目別の値の差")
+    st.dataframe(
+        pd.DataFrame(account_differences),
+        hide_index=True,
+        use_container_width=True,
+    )
+if removed_accounts:
+    st.warning("CSVにない既存科目は、再登録時にDBから削除されます。")
+    st.subheader("削除対象の既存科目")
+    st.dataframe(
+        pd.DataFrame(removed_accounts),
+        hide_index=True,
+        use_container_width=True,
+    )
 new_periods = [month_label(key) for key, (rows, _) in snapshots.items() if not rows]
 if new_periods:
     st.warning("DBに該当月がないため新規登録になります: " + ", ".join(new_periods))
