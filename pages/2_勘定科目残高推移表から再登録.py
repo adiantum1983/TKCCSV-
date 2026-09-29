@@ -32,8 +32,8 @@ def previous_key(key: int) -> int:
 
 
 def is_profit_and_loss_account(account_code: str) -> bool:
-    # Codes 4-8 are P&L; code 9 contains balance-sheet totals and equity accounts.
-    return account_code[:1] in "45678"
+    # Codes 4-8 and current net income (9111) are P&L; other 9xxx rows are balances.
+    return account_code[:1] in "45678" or account_code == "9111"
 
 
 def read_trend_csv(content: bytes) -> tuple[pd.DataFrame, dict[int, str]]:
@@ -159,7 +159,7 @@ def build_month_frame(
         )
 
         if is_profit_and_loss_account(code):
-            if code.startswith("4"):
+            if code.startswith("4") or code == "9111":
                 debit, credit = max(-monthly_amount, 0.0), max(monthly_amount, 0.0)
             else:
                 debit, credit = max(monthly_amount, 0.0), max(-monthly_amount, 0.0)
